@@ -4,7 +4,7 @@ import { REGIONS } from '@/lib/data';
 import vercelConfig from '@/vercel.json';
 
 const functions: Record<string, { regions?: string[] }> =
-  vercelConfig.functions;
+  (vercelConfig as { functions?: Record<string, { regions?: string[] }> }).functions ?? {};
 
 describe('vercel.json', () => {
   it.each(Object.keys(REGIONS))(
