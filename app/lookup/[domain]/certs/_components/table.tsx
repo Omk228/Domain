@@ -1,0 +1,68 @@
+'use client';
+
+import { type FC, Fragment } from 'react';
+
+import { SortableTable } from '@/components/sortable-table';
+import type { CertsData } from '@/lib/certs';
+import { isValidDomain } from '@/lib/utils';
+
+import { DomainLink } from '../../../../_components/domain-link';
+
+type CertsTableProps = {
+  certs: CertsData;
+};
+
+export const CertsTable: FC<CertsTableProps> = ({ certs }) => (
+  <SortableTable
+    data={certs}
+    columns={[
+      {
+        key: 'entry_timestamp',
+        label: 'Logged At',
+        render: (value) => new Date(value).toLocaleString('en-US'),
+      },
+      {
+        key: 'not_before',
+        label: 'Not Before',
+        render: (value) => new Date(value).toLocaleString('en-US'),
+      },
+      {
+        key: 'not_after',
+        label: 'Not After',
+        render: (value) => new Date(value).toLocaleString('en-US'),
+      },
+      {
+        key: 'common_name',
+        label: 'Common Name',
+        render: (value: string) =>
+          isValidDomain(value) ? (
+            <DomainLink domain={value} />
+          ) : (
+            <span>{value}</span>
+          ),
+      },
+      {
+        key: 'name_value',
+        label: 'Matching Identities',
+        render: (value) =>
+          value.split(/\n/g).map((value, index) => (
+            <Fragment key={index}>
+              {index !== 0 && <br />}
+              {isValidDomain(value) ? (
+                <DomainLink domain={value} />
+              ) : (
+                <span>{value}</span>
+              )}
+            </Fragment>
+          )),
+      },
+      {
+        key: 'issuer_name',
+        label: 'Issuer Name',
+      },
+    ]}
+    keyColumn="id"
+    defaultSort="entry_timestamp"
+    defaultSortDirection="desc"
+  />
+);

@@ -1,0 +1,103 @@
+import { env } from '@/env';
+
+import { UserFacingError } from '../user-facing-error';
+import {
+  DnsResolver,
+  type RecordType,
+  type ResolverMultiResponse,
+  type ResolverResponse,
+} from './base';
+
+export class InternalDoHResolver extends DnsResolver {
+  constructor(
+    private readonly location: string,
+    private readonly resolver: 'alibaba' | 'cloudflare' | 'google',
+  ) {
+    super();
+  }
+
+  private getBaseUrl(location: string) {
+    const baseUrl = new URL(
+      env.SITE_URL ||
+        (env.VERCEL_URL && `https://${env.VERCEL_URL}`) ||
+        'http://localhost:3000',
+    );
+    baseUrl.pathname = `/api/internal/resolve/${location}`;
+    return baseUrl;
+  }
+
+  private get requestInit(): RequestInit {
+    const headers: Record<string, string> = {};
+
+    if (env.INTERNAL_API_SECRET) {
+      headers.Authorization = env.INTERNAL_API_SECRET;
+    }
+
+    if (env.VERCEL_AUTOMATION_BYPASS_SECRET) {
+      headers['x-vercel-protection-bypass'] =
+        env.VERCEL_AUTOMATION_BYPASS_SECRET;
+    }
+
+    return { cache: 'no-store', headers };
+  }
+
+  public async resolveRecordType(
+    domain: string,
+    type: RecordType,
+  ): Promise<ResolverResponse> {
+    const url = this.getBaseUrl(this.location);
+    url.searchParams.set('resolver', this.resolver);
+    url.searchParams.set('type', type);
+    url.searchParams.set('domain', domain);
+
+    const response = await fetch(url, this.requestInit);
+    if (!response.ok) {
+      throw new UserFacingError(
+        {
+          title: `DNS resolver (${this.location}) is unavailable`,
+          description: `The DNS resolver for ${this.location} returned an error and may be temporarily down. Please try again shortly.`,
+          retryable: true,
+        },
+        {
+          cause: new Error(
+            `Failed to fetch results for ${this.location} from ${url}: ${response.status} ${response.statusText}`,
+          ),
+        },
+      );
+    }
+
+    const results = (await response.json()) as ResolverMultiResponse;
+
+    return results[type];
+  }
+
+  public async resolveRecordTypes(
+    domain: string,
+    types: readonly RecordType[],
+  ): Promise<ResolverMultiResponse> {
+    const url = this.getBaseUrl(this.location);
+    url.searchParams.set('resolver', this.resolver);
+    types.forEach((type) => url.searchParams.append('type', type));
+    url.searchParams.set('domain', domain);
+
+    const response = await fetch(url, this.requestInit);
+    if (!response.ok) {
+      throw new UserFacingError(
+        {
+          title: `DNS resolver (${this.location}) is unavailable`,
+          description: `The DNS resolver for ${this.location} returned an error and may be temporarily down. Please try again shortly.`,
+          retryable: true,
+        },
+        {
+          cause: new Error(
+            `Failed to fetch results for ${this.location} from ${url}: ${response.status} ${response.statusText}`,
+          ),
+        },
+      );
+    }
+
+    const results = (await response.json()) as ResolverMultiResponse;
+
+    return results;
+  }
+}

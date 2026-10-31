@@ -1,0 +1,145 @@
+import { firstResult as getFirstResult, whoisDomain } from 'whoiser';
+
+import { UserFacingError } from './user-facing-error';
+import { getBaseDomain, isValidDomain } from './utils';
+
+export const formatDate = (date: Date) => date.toISOString().split('T')[0];
+
+const parseDateSafe = (date: string): Date | null => {
+  const parsed = new Date(date);
+  if (!isNaN(parsed.getTime())) return parsed;
+  return null;
+};
+
+export const lookupWhois = async (domain: string) => {
+  let result: Awaited<ReturnType<typeof whoisDomain>>;
+  try {
+    result = await whoisDomain(domain, {
+      raw: true,
+      timeout: 5000,
+    });
+  } catch (error) {
+    throw new UserFacingError(
+      {
+        title: 'WHOIS lookup failed',
+        description:
+          "We couldn't reach the WHOIS server for this domain. It may be temporarily unavailable or rate limiting our requests. Please try again shortly.",
+        retryable: true,
+      },
+      { cause: error },
+    );
+  }
+
+  const mappedResults: Record<string, string> = {};
+  for (const key in result) {
+    const raw = result[key].__raw;
+    if (raw) {
+      mappedResults[key] = Array.isArray(raw) ? raw.join('\n') : raw;
+    }
+  }
+
+  const filteredResults = Object.entries(mappedResults).filter(
+    ([_key, value]) => Boolean(value),
+  );
+
+  return filteredResults;
+};
+
+const UNREGISTERED_INDICATORS = [
+  'domain not found',
+  'no information available',
+  'no se encuentra registrado', // ar
+  'object_not_found', // mx
+  'is free', // .nl
+  'no data was found', // co.il
+  'no entries found', // cz
+  'no data found',
+  'no information was found',
+  'no match',
+  'no object found',
+  'not been registered',
+  'does not exist', // top
+  'not found',
+  'status: free',
+  'status: available', // eu
+  'unassignable', // postiglione.sa.it
+];
+
+type WhoisSummary =
+  | {
+      registered: false;
+    }
+  | {
+      registered: true;
+      // Set when the lookup failed, so registration was assumed, not confirmed.
+      unknown?: true;
+      registrar: string | null;
+      createdAt: string | null;
+      dnssec: string | null;
+    };
+
+export const getWhoisSummary = async (
+  domain: string,
+): Promise<WhoisSummary> => {
+  // TODO Allow resolving for TLDs
+  if (!isValidDomain(domain)) {
+    return {
+      registered: true,
+      registrar: null,
+      createdAt: null,
+      dnssec: null,
+    };
+  }
+
+  const baseDomain = getBaseDomain(domain);
+
+  try {
+    const results = await whoisDomain(baseDomain, {
+      timeout: 5000,
+      raw: true,
+    });
+
+    const firstResult = getFirstResult(results);
+
+    // whoiser resolves socket errors and timeouts as { error } per server.
+    if (!firstResult || 'error' in firstResult) {
+      throw new Error('No valid result found for domain ' + domain);
+    }
+
+    const rawValue = firstResult['__raw'];
+    const rawString = rawValue
+      ? Array.isArray(rawValue)
+        ? rawValue.join('\n')
+        : rawValue
+      : '';
+
+    if (
+      UNREGISTERED_INDICATORS.some((indicator) =>
+        rawString.toLowerCase().includes(indicator),
+      )
+    ) {
+      return {
+        registered: false,
+      };
+    }
+
+    const createdAt =
+      firstResult && 'Created Date' in firstResult
+        ? parseDateSafe(firstResult['Created Date'].toString())
+        : null;
+    return {
+      registered: true,
+      registrar: firstResult['Registrar']?.toString() || null,
+      createdAt: createdAt && formatDate(createdAt),
+      dnssec: firstResult['DNSSEC']?.toString() || null,
+    };
+  } catch {
+    return {
+      registered: true,
+      unknown: true,
+      registrar: null,
+      createdAt: null,
+      dnssec: null,
+    };
+  }
+};
