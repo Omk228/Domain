@@ -3,6 +3,12 @@
   "version": "0.1.0",
   "license": "AGPL-3.0-only",
   "packageManager": "pnpm@9.15.5",
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "9.15.5"
+    }
+  },
   "engines": {
     "node": ">=20.0.0"
   },
