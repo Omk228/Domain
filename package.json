@@ -2,6 +2,7 @@
   "name": "domain-digger",
   "version": "0.1.0",
   "license": "AGPL-3.0-only",
+  "packageManager": "pnpm@9.15.5",
   "engines": {
     "node": ">=20.0.0"
   },
@@ -91,11 +92,5 @@
     "prettier-plugin-tailwindcss": "^0.8.1",
     "typescript": "^6.0.3",
     "vitest": "^5.0.5"
-  },
-  "pnpm": {
-    "overrides": {
-      "@types/react": "19.3.0",
-      "@types/react-dom": "19.3.0"
-    }
   }
 }
